@@ -13,7 +13,7 @@ A simple reinforcement learning project based on the Frozen Lake environment.
    ```
    python -m venv venv
    # On Windows:
-   venv\Scripts\activate
+   .\venv\Scripts\activate
    # On Mac/Linux:
    source venv/bin/activate
    ```

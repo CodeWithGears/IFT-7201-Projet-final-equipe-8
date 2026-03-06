@@ -1,2 +1,5 @@
-gymnasium
-numpy
+cloudpickle==3.1.2
+Farama-Notifications==0.0.4
+gymnasium==1.2.3
+numpy==2.4.2
+typing_extensions==4.15.0
