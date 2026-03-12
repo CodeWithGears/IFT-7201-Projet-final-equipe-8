@@ -1,9 +1,13 @@
-import gymnasium as gym
+from env import create_frozenlake_env
+from maps import map_generator
 
-env = gym.make("FrozenLake-v1", render_mode="human", map_name="4x4")
+# S, F, H, or G
+
+MAP = map_generator(16, 0.07, 0.2, 2)
+
+env = create_frozenlake_env(map_desc=MAP, render_mode="human")
 
 state, info = env.reset()
-
 done = False
 
 while not done:
