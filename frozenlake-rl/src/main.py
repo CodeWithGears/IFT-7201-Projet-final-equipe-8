@@ -86,59 +86,78 @@ cas_etude = {
     },
 }
 
-def DQN_training (env, retrain=False, name="dqn_FrozenLake"):
+def DQN_training (env, retrain=False, name="dqn_FrozenLake", total_timesteps=10000):
     if retrain or not os.path.exists(f"{name}.zip"):
         model = DQN("MlpPolicy", env, verbose=1)
-        model.learn(total_timesteps=10000, log_interval=4)
+        model.learn(total_timesteps=total_timesteps, log_interval=4)
         model.save(name)
     else:
         model = DQN.load(name, env=env)
     return model
 
-def PPO_training (env, retrain=False, name="ppo_FrozenLake"):
+def PPO_training (env, retrain=False, name="ppo_FrozenLake", total_timesteps=10000):
     if retrain or not os.path.exists(f"{name}.zip"):
         model = PPO("MlpPolicy", env, verbose=1)
-        model.learn(total_timesteps=10000, log_interval=4)
+        model.learn(total_timesteps=total_timesteps, log_interval=4)
         model.save(name)
     else:
         model = PPO.load(name, env=env)
     return model
+
+def evaluate_model(model, env, num_episodes=1):
+    rewards = []
+    for episode in range(num_episodes):
+        state, _ = env.reset()
+        terminated, truncated = False, False
+        total_reward = 0
+
+        while not (terminated or truncated):
+            action, _ = model.predict(state, deterministic=True)
+            state, reward, terminated, truncated, _ = env.step(action)
+            total_reward += reward
+        rewards.append(total_reward)
+        env.close()
+    return sum(rewards) / num_episodes
+
+def make_env(config, render_mode=None):
+    env = gym.make(
+        "FrozenLake-v1",
+        desc=config ["desc"],
+        is_slippery=config ["is_slippery"],
+        success_rate=config ["success_rate"],
+        reward_schedule=config ["reward_schedule"],
+        render_mode=render_mode,
+    )
+    return env
 
 def main():
     #Entrainer/charger les modèles DQN et PPO pour chaque cas d'étude
     DQN_models = {}
     PPO_models = {}
     train_models = False
+    total_timesteps = 10000
     for cas in cas_etude.keys():
         config = cas_etude[cas]
 
-        env = gym.make(
-            "FrozenLake-v1",
-            desc=config ["desc"],
-            is_slippery=config ["is_slippery"],
-            success_rate=config ["success_rate"],
-            reward_schedule=config ["reward_schedule"],
-            render_mode="human",
-        )
         print(f"Training DQN for {cas} case...")
-        DQN_models[cas] = DQN_training(env, retrain=train_models, name=f"dqn_FrozenLake_{cas}")
+        env_dqn = make_env(config)
+        DQN_models[cas] = DQN_training(env_dqn, retrain=train_models, name=f"dqn_FrozenLake_{cas}", total_timesteps=total_timesteps)
 
         print(f"Training PPO for {cas} case...")
-        PPO_models[cas] = PPO_training(env, retrain=train_models, name=f"ppo_FrozenLake_{cas}")
+        env_ppo = make_env(config)
+        PPO_models[cas] = PPO_training(env_ppo, retrain=train_models, name=f"ppo_FrozenLake_{cas}", total_timesteps=total_timesteps)
 
     #Évaluation des modèles DQN et PPO pour chaque cas d'étude
+    for cas in cas_etude.keys():
+        print(f"Evaluating DQN for {cas} case...")
+        env_dqn = make_env(cas_etude[cas], render_mode="human")
+        dqn_reward = evaluate_model(DQN_models[cas], env_dqn, num_episodes=1)
+        print(f"DQN average reward for {cas} case: {dqn_reward}")
 
-    state, _ = env.reset()
-
-    terminated, truncated = False, False
-
-    while not (terminated or truncated):
-        action = env.action_space.sample()
-        state, reward, terminated, truncated, _ = env.step(action)
-        print("State:", state, "Reward:", reward)
-        done = terminated or truncated
-
-    env.close()
+        print(f"Evaluating PPO for {cas} case...")
+        env_ppo = make_env(cas_etude[cas], render_mode="human")
+        ppo_reward = evaluate_model(PPO_models[cas], env_ppo, num_episodes=1)
+        print(f"PPO average reward for {cas} case: {ppo_reward}")
 
 if __name__ == "__main__":
     main()
