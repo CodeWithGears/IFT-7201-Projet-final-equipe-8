@@ -107,9 +107,10 @@ def PPO_training (env, retrain=False, name="ppo_FrozenLake", total_timesteps=100
 def evaluate_model(model, env, num_episodes=1):
     rewards = []
     for episode in range(num_episodes):
-        state, _ = env.reset()
         terminated, truncated = False, False
         total_reward = 0
+
+        state, _ = env.reset()
 
         while not (terminated or truncated):
             action, _ = model.predict(state, deterministic=True)
@@ -118,6 +119,18 @@ def evaluate_model(model, env, num_episodes=1):
         rewards.append(total_reward)
         env.close()
     return sum(rewards) / num_episodes
+
+def display_env(model, env, max_steps=1000):
+    time_step = 0
+    terminated, truncated = False, False
+
+    state, _ = env.reset()
+
+    while not (terminated or truncated) and time_step < max_steps:
+        action, _ = model.predict(state, deterministic=True)
+        state, reward, terminated, truncated, _ = env.step(action)
+        time_step += 1
+    env.close()
 
 def make_env(config, render_mode=None):
     env = gym.make(
@@ -146,6 +159,9 @@ def main():
         print(f"Training PPO for {cas} case...")
         env_ppo = make_env(config)
         PPO_models[cas] = PPO_training(env_ppo, retrain=train_models, name=f"ppo_FrozenLake_{cas}", total_timesteps=total_timesteps)
+    
+    display_env = make_env(cas_etude["medium"], render_mode="human")
+    display_env(display_env, DQN_models["medium"], max_steps=1000)
 
     #Évaluation des modèles DQN et PPO pour chaque cas d'étude
     for cas in cas_etude.keys():
