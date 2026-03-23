@@ -1,6 +1,8 @@
 import os
+import numpy as np
 import gymnasium as gym
-from gymnasium.wrappers import TimeLimit
+from gymnasium.wrappers import TransformObservation
+from gymnasium.spaces import Box
 from stable_baselines3 import DQN, PPO
 
 cas_etude = {
@@ -21,7 +23,7 @@ cas_etude = {
         ],
         "is_slippery": True,
         "success_rate": 0.9,
-        "reward_schedule": (100, -15, -0.1),
+        "reward_schedule": (50, -15, -0.1),
     },
     "medium": {
         "desc": [
@@ -40,7 +42,7 @@ cas_etude = {
         ],
         "is_slippery": True,
         "success_rate": 0.8,
-        "reward_schedule": (100, -15, -0.1),
+        "reward_schedule": (50, -15, -0.1),
     },
     "hard": {
         "desc": [
@@ -59,7 +61,7 @@ cas_etude = {
         ],
         "is_slippery": True,
         "success_rate": 0.7,
-        "reward_schedule": (100, -15, -0.1),
+        "reward_schedule": (50, -15, -0.1),
     },
 }
 
@@ -76,7 +78,7 @@ def DQN_training (env, retrain=False, name="dqn_FrozenLake", total_timesteps=100
             train_freq=4,
             gradient_steps=1,
             target_update_interval=1000,
-            exploration_fraction=0.7,
+            exploration_fraction=0.5,
             exploration_initial_eps=1.0,
             exploration_final_eps=0.1,
             policy_kwargs=dict(net_arch=[128, 128]),
@@ -95,8 +97,8 @@ def PPO_training(env, retrain=False, name="ppo_FrozenLake", total_timesteps=5000
             "MlpPolicy",
             env,
             learning_rate=1e-4,
-            n_steps=2048,
-            batch_size=128,
+            n_steps=4096,
+            batch_size=256,
             n_epochs=10,
             gamma=0.99,
             gae_lambda=0.95,
@@ -152,21 +154,32 @@ def make_env(config, render_mode=None):
         reward_schedule=config ["reward_schedule"],
         render_mode=render_mode,
     )
+    n = env.observation_space.n
+    env = TransformObservation(
+        env,
+        lambda obs: np.eye(n, dtype=np.float32)[int(obs)],
+        observation_space=Box(0.0, 1.0, shape=(n,), dtype=np.float32),
+    )
     return env
+
+def to_one_hot(state, n_states):
+    vec = np.zeros(n_states, dtype=np.float32)
+    vec[int(state)] = 1.0
+    return vec
 
 def main():
     #Entrainer/charger les modèles DQN et PPO pour chaque cas d'étude
     DQN_models = {}
     PPO_models = {}
     train_models = True
-    total_timesteps_list = [250000, 250000, 1000000]
-    for i, cas in enumerate(list(cas_etude.keys())[2:]):
+    total_timesteps_list = [250000, 500000, 1500000]
+    for i, cas in enumerate(list(cas_etude.keys())):
         config = cas_etude[cas]
-        total_timesteps = 1000000 #total_timesteps_list[i]
+        total_timesteps = total_timesteps_list[i]
 
         print(f"Training DQN for {cas} case...")
         env_dqn = make_env(config)
-        #DQN_models[cas] = DQN_training(env_dqn, retrain=train_models, name=f"dqn_FrozenLake_{cas}", total_timesteps=total_timesteps)
+        DQN_models[cas] = DQN_training(env_dqn, retrain=train_models, name=f"dqn_FrozenLake_{cas}", total_timesteps=total_timesteps)
 
         print(f"Training PPO for {cas} case...")
         env_ppo = make_env(config)
