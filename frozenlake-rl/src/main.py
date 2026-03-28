@@ -1,9 +1,12 @@
 import os
 import numpy as np
 import gymnasium as gym
+import matplotlib.pyplot as plt
+
 from gymnasium.wrappers import TransformObservation
 from gymnasium.spaces import Box
 from stable_baselines3 import DQN, PPO
+from stable_baselines3.common.callbacks import BaseCallback
 
 cas_etude = {
     "easy": {
@@ -115,22 +118,28 @@ def PPO_training(env, retrain=False, name="ppo_FrozenLake", total_timesteps=5000
         model = PPO.load(name, env=env)
     return model
 
-def evaluate_model(model, env, num_episodes=1):
-    rewards = []
-    for episode in range(num_episodes):
-        terminated, truncated = False, False
-        total_reward = 0
 
-        state, _ = env.reset()
+def save_training_stats(path, batch_index, avg_rewards, avg_holes):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    np.savez(
+        path,
+        batch_index=batch_index,
+        avg_rewards=avg_rewards,
+        avg_holes=avg_holes,
+    )
 
-        while not (terminated or truncated):
-            action, _ = model.predict(state, deterministic=True)
-            action = int(action)
-            state, reward, terminated, truncated, _ = env.step(action)
-            total_reward += reward
-        rewards.append(total_reward)
-    env.close()
-    return sum(rewards) / num_episodes
+
+def plot_training_stats(path, output_dir="training_figures", title_prefix=""):
+    data = np.load(path)
+    x = data["batch_index"]
+    avg_rewards = data["avg_rewards"]
+    avg_holes = data["avg_holes"]
+
+    os.makedirs(output_dir, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(path))[0]
+
+    holes_fig_path = os.path.join(output_dir, f"{stem}_avg_holes.png")
+    rewards_fig_path = os.path.join(output_dir, f"{stem}_avg_rewards.png")
 
 def display_model(model, env, max_steps=1000):
     time_step = 0
@@ -192,13 +201,9 @@ def main():
     for cas in cas_etude.keys():
         print(f"Evaluating DQN for {cas} case...")
         env_dqn = make_env(cas_etude[cas])
-        dqn_reward = evaluate_model(DQN_models[cas], env_dqn, num_episodes=1)
-        print(f"DQN average reward for {cas} case: {dqn_reward}")
 
         print(f"Evaluating PPO for {cas} case...")
         env_ppo = make_env(cas_etude[cas])
-        ppo_reward = evaluate_model(PPO_models[cas], env_ppo, num_episodes=1)
-        print(f"PPO average reward for {cas} case: {ppo_reward}")
 
 if __name__ == "__main__":
     main()
