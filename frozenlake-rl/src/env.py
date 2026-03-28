@@ -1,4 +1,27 @@
 import gymnasium as gym
+from main import cas_etude, make_env
+import matplotlib.pyplot as plt
+
+
+if __name__ == "__main__":
+    for cas in cas_etude.keys():
+        print(f"Rendering environment for {cas} case...")
+        env_easy = make_env(cas_etude[cas], render_mode="rgb_array")
+        env_easy.reset()
+
+        frame = env_easy.render()
+        plt.imshow(frame)
+        plt.axis("off")
+        plt.savefig(f"frozen_lake_render_{cas}.pdf", bbox_inches='tight', dpi = 400)
+        plt.show()
+
+
+
+
+
+
+
+# ==== OLD FUCNTION UNUSED ====
 
 def create_frozenlake_env(
     map_desc=None,
