@@ -68,6 +68,33 @@ cas_etude = {
     },
 }
 
+
+class FrozenLakeHoleInfoWrapper(gym.Wrapper):
+    """
+    Adds `fell_in_hole` to info on terminal steps so the callback can count holes.
+    """
+
+    def __init__(self, env):
+        super().__init__(env)
+        raw_desc = self.unwrapped.desc
+        self.desc = np.array([
+            [cell.decode("utf-8") if isinstance(cell, bytes) else str(cell) for cell in row]
+            for row in raw_desc
+        ])
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+
+        state = int(self.unwrapped.s)
+        n_cols = self.desc.shape[1]
+        row, col = divmod(state, n_cols)
+        tile = self.desc[row, col]
+
+        info = dict(info)
+        info["fell_in_hole"] = bool(terminated and tile == "H")
+        return obs, reward, terminated, truncated, info
+    
+
 def DQN_training (env, retrain=False, name="dqn_FrozenLake", total_timesteps=100000, seed=6):
     if retrain or not os.path.exists(f"{name}.zip"):
         model = DQN(
@@ -141,6 +168,29 @@ def plot_training_stats(path, output_dir="training_figures", title_prefix=""):
     holes_fig_path = os.path.join(output_dir, f"{stem}_avg_holes.png")
     rewards_fig_path = os.path.join(output_dir, f"{stem}_avg_rewards.png")
 
+    plt.figure(figsize=(8, 5))
+    plt.plot(x, avg_holes, marker="o")
+    plt.xlabel("Temps (numéro de la batch)")
+    plt.ylabel("Nombre moyen de chutes dans les trous par batch")
+    plt.title(f"{title_prefix} Nombre moyen de chutes dans les trous par batch en fonction du temps".strip())
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(holes_fig_path, dpi=150)
+    plt.close()
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(x, avg_rewards, marker="o")
+    plt.xlabel("Temps (numéro de la batch)")
+    plt.ylabel("Récompenses totales moyennes par batch")
+    plt.title(f"{title_prefix} Récompenses totales moyennes par batch en fonction du temps".strip())
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(rewards_fig_path, dpi=150)
+    plt.close()
+
+    return holes_fig_path, rewards_fig_path
+
+
 def display_model(model, env, max_steps=1000):
     time_step = 0
     terminated, truncated = False, False
@@ -163,6 +213,8 @@ def make_env(config, render_mode=None):
         reward_schedule=config ["reward_schedule"],
         render_mode=render_mode,
     )
+    env = FrozenLakeHoleInfoWrapper(env)
+
     n = env.observation_space.n
     env = TransformObservation(
         env,
