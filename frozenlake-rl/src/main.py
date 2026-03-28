@@ -93,10 +93,81 @@ class FrozenLakeHoleInfoWrapper(gym.Wrapper):
         info = dict(info)
         info["fell_in_hole"] = bool(terminated and tile == "H")
         return obs, reward, terminated, truncated, info
+
+
+class SimpleTrainingStatsCallback(BaseCallback):
+    """
+    Records:
+    - average total reward per batch of completed episodes
+    - average hole falls per batch of completed episodes
+
+    Saves only one .npz file at the end.
+    """
+
+    def __init__(self, save_path, episodes_per_batch=20, verbose=0):
+        super().__init__(verbose)
+        self.save_path = save_path
+        self.episodes_per_batch = int(episodes_per_batch)
+
+        self.current_rewards = None
+        self.batch_rewards = []
+        self.batch_holes = []
+
+        self.batch_index = []
+        self.avg_rewards = []
+        self.avg_holes = []
+
+    def _on_training_start(self):
+        self.current_rewards = np.zeros(self.training_env.num_envs, dtype=np.float64)
+
+    def _flush_batch(self):
+        if not self.batch_rewards:
+            return
+
+        self.batch_index.append(len(self.batch_index) + 1)
+        self.avg_rewards.append(float(np.mean(self.batch_rewards)))
+        self.avg_holes.append(float(np.mean(self.batch_holes)))
+
+        self.batch_rewards.clear()
+        self.batch_holes.clear()
+
+    def _on_step(self):
+        rewards = np.array(self.locals["rewards"], dtype=np.float64).reshape(-1)
+        dones = np.array(self.locals["dones"], dtype=bool).reshape(-1)
+        infos = self.locals["infos"]
+
+        self.current_rewards += rewards
+
+        for i, done in enumerate(dones):
+            if not done:
+                continue
+
+            self.batch_rewards.append(float(self.current_rewards[i]))
+            self.batch_holes.append(1.0 if infos[i].get("fell_in_hole", False) else 0.0)
+            self.current_rewards[i] = 0.0
+
+            if len(self.batch_rewards) >= self.episodes_per_batch:
+                self._flush_batch()
+
+        return True
+
+    def _on_training_end(self):
+        self._flush_batch()
+        save_training_stats(
+            self.save_path,
+            np.array(self.batch_index, dtype=np.int32),
+            np.array(self.avg_rewards, dtype=np.float64),
+            np.array(self.avg_holes, dtype=np.float64),
+        )
     
 
-def DQN_training (env, retrain=False, name="dqn_FrozenLake", total_timesteps=100000, seed=6):
+def DQN_training (env, retrain=False, name="dqn_FrozenLake", total_timesteps=100000, seed=6, stats_dir="training_stats", episodes_per_batch=20):
+    stats_path = os.path.join(stats_dir, f"{name}.npz")
     if retrain or not os.path.exists(f"{name}.zip"):
+        callback = SimpleTrainingStatsCallback(
+            save_path=stats_path,
+            episodes_per_batch=episodes_per_batch,
+        )
         model = DQN(
             "MlpPolicy",
             env,
@@ -115,14 +186,19 @@ def DQN_training (env, retrain=False, name="dqn_FrozenLake", total_timesteps=100
             verbose=1,
             seed=seed,
         )
-        model.learn(total_timesteps=total_timesteps, log_interval=4)
+        model.learn(total_timesteps=total_timesteps, log_interval=4, callback=callback)
         model.save(name)
     else:
         model = DQN.load(name, env=env)
     return model
 
-def PPO_training(env, retrain=False, name="ppo_FrozenLake", total_timesteps=500000, seed=6):
+def PPO_training(env, retrain=False, name="ppo_FrozenLake", total_timesteps=500000, seed=6, stats_dir="training_stats", episodes_per_batch=20):
+    stats_path = os.path.join(stats_dir, f"{name}.npz")
     if retrain or not os.path.exists(f"{name}.zip"):
+        callback = SimpleTrainingStatsCallback(
+            save_path=stats_path,
+            episodes_per_batch=episodes_per_batch,
+        )
         model = PPO(
             "MlpPolicy",
             env,
@@ -139,7 +215,7 @@ def PPO_training(env, retrain=False, name="ppo_FrozenLake", total_timesteps=5000
             verbose=1,
             seed=seed,
         )
-        model.learn(total_timesteps=total_timesteps, log_interval=4)
+        model.learn(total_timesteps=total_timesteps, log_interval=4, callback=callback)
         model.save(name)
     else:
         model = PPO.load(name, env=env)
@@ -234,28 +310,29 @@ def main():
     PPO_models = {}
     train_models = True
     total_timesteps_list = [250000, 500000, 1500000]
+    episodes_per_batch = 20
     for i, cas in enumerate(list(cas_etude.keys())):
         config = cas_etude[cas]
         total_timesteps = total_timesteps_list[i]
 
         print(f"Training DQN for {cas} case...")
         env_dqn = make_env(config)
-        DQN_models[cas] = DQN_training(env_dqn, retrain=train_models, name=f"dqn_FrozenLake_{cas}", total_timesteps=total_timesteps)
+        DQN_models[cas] = DQN_training(env_dqn, retrain=train_models, name=f"dqn_FrozenLake_{cas}", total_timesteps=total_timesteps, episodes_per_batch=episodes_per_batch)
 
         print(f"Training PPO for {cas} case...")
         env_ppo = make_env(config)
-        PPO_models[cas] = PPO_training(env_ppo, retrain=train_models, name=f"ppo_FrozenLake_{cas}", total_timesteps=total_timesteps)
+        PPO_models[cas] = PPO_training(env_ppo, retrain=train_models, name=f"ppo_FrozenLake_{cas}", total_timesteps=total_timesteps, episodes_per_batch=episodes_per_batch)
+
+        dqn_stats = os.path.join("training_stats", f"dqn_FrozenLake_{cas}.npz")
+        ppo_stats = os.path.join("training_stats", f"ppo_FrozenLake_{cas}.npz")
+
+        if os.path.exists(dqn_stats):
+            plot_training_stats(dqn_stats, title_prefix=f"DQN - {cas}")
+        if os.path.exists(ppo_stats):
+            plot_training_stats(ppo_stats, title_prefix=f"PPO - {cas}")
     
     display_env = make_env(cas_etude["hard"], render_mode="human")
     display_model(DQN_models["hard"], display_env)
-
-    #Évaluation des modèles DQN et PPO pour chaque cas d'étude
-    for cas in cas_etude.keys():
-        print(f"Evaluating DQN for {cas} case...")
-        env_dqn = make_env(cas_etude[cas])
-
-        print(f"Evaluating PPO for {cas} case...")
-        env_ppo = make_env(cas_etude[cas])
 
 if __name__ == "__main__":
     main()
