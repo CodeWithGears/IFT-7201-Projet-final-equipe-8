@@ -4,16 +4,23 @@ import matplotlib.pyplot as plt
 
 
 if __name__ == "__main__":
-    for cas in cas_etude.keys():
-        print(f"Rendering environment for {cas} case...")
+
+    fig, axs = plt.subplots(1, 3, figsize=(6, 4))
+    for idx, cas in enumerate(cas_etude.keys()):
         env_easy = make_env(cas_etude[cas], render_mode="rgb_array")
         env_easy.reset()
-
         frame = env_easy.render()
-        plt.imshow(frame)
-        plt.axis("off")
-        plt.savefig(f"frozen_lake_render_{cas}.pdf", bbox_inches='tight', dpi = 400)
-        plt.show()
+        axs[idx].imshow(frame)
+        axs[idx].set_axis_off()
+        axs[idx].set_title(f"{cas}", fontsize=12)
+
+    axs[0].set_title("a) Facile", fontsize=8, fontweight='bold')
+    axs[1].set_title("b) Médium", fontsize=8, fontweight='bold')
+    axs[2].set_title("c) Difficile", fontsize=8, fontweight='bold')
+
+    plt.tight_layout()
+    plt.savefig("frozen_lake_renders.pdf", bbox_inches='tight', dpi=400)
+    plt.show()
 
 
 
