@@ -113,7 +113,7 @@ class SimpleTrainingStatsCallback(BaseCallback):
         self.batch_rewards = []
         self.batch_holes = []
 
-        self.batch_index = []
+        self.timesteps = []
         self.avg_rewards = []
         self.avg_holes = []
 
@@ -124,7 +124,7 @@ class SimpleTrainingStatsCallback(BaseCallback):
         if not self.batch_rewards:
             return
 
-        self.batch_index.append(len(self.batch_index) + 1)
+        self.timesteps.append(int(self.num_timesteps))
         self.avg_rewards.append(float(np.mean(self.batch_rewards)))
         self.avg_holes.append(float(np.mean(self.batch_holes)))
 
@@ -155,7 +155,7 @@ class SimpleTrainingStatsCallback(BaseCallback):
         self._flush_batch()
         save_training_stats(
             self.save_path,
-            np.array(self.batch_index, dtype=np.int32),
+            np.array(self.timesteps, dtype=np.int64),
             np.array(self.avg_rewards, dtype=np.float64),
             np.array(self.avg_holes, dtype=np.float64),
         )
@@ -181,7 +181,7 @@ def DQN_training (env, retrain=False, name="dqn_FrozenLake", total_timesteps=100
             target_update_interval=1000,
             exploration_fraction=0.5,
             exploration_initial_eps=1.0,
-            exploration_final_eps=0.1,
+            exploration_final_eps=0.05,
             policy_kwargs=dict(net_arch=[128, 128]),
             verbose=1,
             seed=seed,
@@ -203,8 +203,8 @@ def PPO_training(env, retrain=False, name="ppo_FrozenLake", total_timesteps=5000
             "MlpPolicy",
             env,
             learning_rate=1e-4,
-            n_steps=4096,
-            batch_size=256,
+            n_steps=2048,
+            batch_size=128,
             n_epochs=10,
             gamma=0.99,
             gae_lambda=0.95,
@@ -222,11 +222,11 @@ def PPO_training(env, retrain=False, name="ppo_FrozenLake", total_timesteps=5000
     return model
 
 
-def save_training_stats(path, batch_index, avg_rewards, avg_holes):
+def save_training_stats(path, timesteps, avg_rewards, avg_holes):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     np.savez(
         path,
-        batch_index=batch_index,
+        timesteps=timesteps,
         avg_rewards=avg_rewards,
         avg_holes=avg_holes,
     )
@@ -234,7 +234,19 @@ def save_training_stats(path, batch_index, avg_rewards, avg_holes):
 
 def plot_training_stats(path, output_dir="training_figures", title_prefix=""):
     data = np.load(path)
-    x = data["batch_index"]
+
+    if "timesteps" in data:
+        x = data["timesteps"]
+        xlabel = "Training timesteps"
+    elif "batch_index" in data:
+        x = data["batch_index"]
+        xlabel = "Batch index"
+    else:
+        raise KeyError(
+            f"Neither 'timesteps' nor 'batch_index' found in {path}. "
+            f"Available keys: {list(data.keys())}"
+        )
+
     avg_rewards = data["avg_rewards"]
     avg_holes = data["avg_holes"]
 
@@ -245,20 +257,20 @@ def plot_training_stats(path, output_dir="training_figures", title_prefix=""):
     rewards_fig_path = os.path.join(output_dir, f"{stem}_avg_rewards.png")
 
     plt.figure(figsize=(8, 5))
-    plt.plot(x, avg_holes, marker="o")
-    plt.xlabel("Temps (numéro de la batch)")
-    plt.ylabel("Nombre moyen de chutes dans les trous par batch")
-    plt.title(f"{title_prefix} Nombre moyen de chutes dans les trous par batch en fonction du temps".strip())
+    plt.plot(x, avg_holes)
+    plt.xlabel(xlabel)
+    plt.ylabel("Average hole falls")
+    plt.title(f"{title_prefix} Average hole falls".strip())
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(holes_fig_path, dpi=150)
     plt.close()
 
     plt.figure(figsize=(8, 5))
-    plt.plot(x, avg_rewards, marker="o")
-    plt.xlabel("Temps (numéro de la batch)")
-    plt.ylabel("Récompenses totales moyennes par batch")
-    plt.title(f"{title_prefix} Récompenses totales moyennes par batch en fonction du temps".strip())
+    plt.plot(x, avg_rewards)
+    plt.xlabel(xlabel)
+    plt.ylabel("Average total reward")
+    plt.title(f"{title_prefix} Average total reward".strip())
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(rewards_fig_path, dpi=150)

@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 
 cas_etude = {
     "easy": {
+        "name": "facile",
         "desc": [
             "SFFFFFHFFFFF",
             "FFFFFFFFFFHF",
@@ -23,6 +24,7 @@ cas_etude = {
         "reward_schedule": (50, -15, -0.1),
     },
     "medium": {
+        "name": "moyenne",
         "desc": [
             "SFFFFFFFFFFF",
             "FFFFFFFHFHFF",
@@ -42,6 +44,7 @@ cas_etude = {
         "reward_schedule": (50, -15, -0.1),
     },
     "hard": {
+        "name": "difficile",
         "desc": [
             "SFFFFFFFFFFH",
             "FFHHFFFFFFFH",
@@ -62,10 +65,29 @@ cas_etude = {
     },
 }
 
+def smooth_curve(y, window=8):
+    y = np.asarray(y, dtype=float)
+    if y.size == 0:
+        return y.copy()
+
+    window = max(1, int(window))
+    if window % 2 == 0:
+        window += 1
+    if y.size < window:
+        window = y.size if y.size % 2 == 1 else max(1, y.size - 1)
+    if window <= 1:
+        return y.copy()
+
+    pad = window // 2
+    ypad = np.pad(y, (pad, pad), mode="edge")
+    kernel = np.ones(window, dtype=float) / window
+    return np.convolve(ypad, kernel, mode="valid")
+
 def generate_comparison_figures_for_map(
     map_name,
     stats_dir="training_stats",
     output_dir="training_figures",
+    smooth_window=9,
 ):
     dqn_path = os.path.join(stats_dir, f"dqn_FrozenLake_{map_name}.npz")
     ppo_path = os.path.join(stats_dir, f"ppo_FrozenLake_{map_name}.npz")
@@ -78,25 +100,26 @@ def generate_comparison_figures_for_map(
     dqn_data = np.load(dqn_path)
     ppo_data = np.load(ppo_path)
 
-    dqn_x = dqn_data["batch_index"]
-    dqn_rewards = dqn_data["avg_rewards"]
-    dqn_holes = dqn_data["avg_holes"]
+    dqn_x = dqn_data["timesteps"]
+    dqn_rewards = smooth_curve(dqn_data["avg_rewards"], window=smooth_window)
+    dqn_holes = smooth_curve(dqn_data["avg_holes"], window=smooth_window)
 
-    ppo_x = ppo_data["batch_index"]
-    ppo_rewards = ppo_data["avg_rewards"]
-    ppo_holes = ppo_data["avg_holes"]
+    ppo_x = ppo_data["timesteps"]
+    ppo_rewards = smooth_curve(ppo_data["avg_rewards"], window=smooth_window)
+    ppo_holes = smooth_curve(ppo_data["avg_holes"], window=smooth_window)
 
     os.makedirs(output_dir, exist_ok=True)
 
-    reward_fig_path = os.path.join(output_dir, f"{map_name}_reward_comparison.png")
-    holes_fig_path = os.path.join(output_dir, f"{map_name}_holes_comparison.png")
+    reward_fig_path = os.path.join(output_dir, f"{map_name}_comparaison_recompense.png")
+    holes_fig_path = os.path.join(output_dir, f"{map_name}_comparaison_trous.png")
 
     plt.figure(figsize=(8, 5))
     plt.plot(dqn_x, dqn_rewards, label="DQN")
     plt.plot(ppo_x, ppo_rewards, label="PPO")
-    plt.xlabel("Batch index")
-    plt.ylabel("Average total reward per batch")
-    plt.title(f"{map_name.capitalize()} map - reward during training")
+    plt.xlabel("Pas de temps d'entraînement")
+    plt.ylabel("Récompense totale moyenne par batch")
+    plt.ylim(-20, 50)
+    plt.title(f"Map {cas_etude[map_name].get('name', map_name)} - Récompense totale moyenne par batch à l'entraînement")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
@@ -106,9 +129,10 @@ def generate_comparison_figures_for_map(
     plt.figure(figsize=(8, 5))
     plt.plot(dqn_x, dqn_holes, label="DQN")
     plt.plot(ppo_x, ppo_holes, label="PPO")
-    plt.xlabel("Batch index")
-    plt.ylabel("Average hole falls per batch")
-    plt.title(f"{map_name.capitalize()} map - hole falls during training")
+    plt.xlabel("Pas de temps d'entraînement")
+    plt.ylabel("Nombre de fois moyen tombé dans un trou par batch")
+    plt.ylim(-0, 1.1)
+    plt.title(f"Map {cas_etude[map_name].get('name', map_name)} - Nombre de fois moyen tombé dans un trou par batch à l'entraînement")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
@@ -122,6 +146,7 @@ def generate_all_comparison_figures(
     map_names=None,
     stats_dir="training_stats",
     output_dir="training_figures",
+    smooth_window=8,
 ):
     if map_names is None:
         map_names = list(cas_etude.keys())
@@ -132,6 +157,7 @@ def generate_all_comparison_figures(
             map_name,
             stats_dir=stats_dir,
             output_dir=output_dir,
+            smooth_window=smooth_window,
         )
     return outputs
 
