@@ -75,10 +75,13 @@ def custom_plot_training_stats(axs,
             axs[row, col].grid(True, linestyle='--', alpha=0.5)
             if row == 1:
                 axs[row, col].set_xlabel(xlabel, labelpad=15)
-            if row == 0 and col == 0:
-                axs[row, col].legend(loc="lower right")
-            if row == 1 and col == 0:
-                axs[row, col].legend(loc="upper right")
+
+    axs[0, 0].legend(loc="lower right")
+    axs[0, 1].legend(loc="upper left")
+    axs[0, 2].legend(loc="upper left")
+    axs[1, 0].legend(loc="upper right")
+    axs[1, 1].legend(loc="upper right")
+    axs[1, 2].legend(loc="lower left")
 
     for ax in axs.flat:
         ax.xaxis.set_major_formatter(mticker.ScalarFormatter(useMathText=True))
