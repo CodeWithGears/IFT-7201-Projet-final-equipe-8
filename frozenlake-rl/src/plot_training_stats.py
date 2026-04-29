@@ -10,6 +10,7 @@ from main import cas_etude, make_env
 
 DQN_COLOR = "#1f77b4"
 PPO_COLOR = "#ff7f0e"
+LAGRANGE_COLOR = "#2ca02c"
 
 translate = {"easy": "Facile", "medium": "Médium", "hard": "Difficile"}
 
@@ -19,15 +20,19 @@ def custom_plot_training_stats(axs,
                                i,
                                cas,
                                dqn_path, 
-                               ppo_path,):  
+                               ppo_path,
+                               lagrange_path):  
 
     dqn = np.load(dqn_path)
     ppo = np.load(ppo_path)
+    lagrange = np.load(lagrange_path)
+
+    x_lagrange = lagrange["batch_index"]
 
     # For DQN
     if "timesteps" in dqn:
         x_dqn = dqn["timesteps"]
-        xlabel = "Nombre d'époques"
+        xlabel = "Nombre de pas de temps total"
     elif "batch_index" in dqn:
         x_dqn = dqn["batch_index"]
         xlabel = "Batch index"
@@ -40,7 +45,7 @@ def custom_plot_training_stats(axs,
     # For PPO
     if "timesteps" in ppo:
         x_ppo = ppo["timesteps"]
-        xlabel = "Nombre d'époques"
+        xlabel = "Nombre de pas de temps total"
     elif "batch_index" in ppo:
         x_ppo = ppo["batch_index"]
         xlabel = "Batch index"
@@ -49,6 +54,7 @@ def custom_plot_training_stats(axs,
             f"Neither 'timesteps' nor 'batch_index' found in {ppo_path}. "
             f"Available keys: {list(ppo.keys())}"
         )
+    print(f"cas: {cas}, DQN: {len(x_dqn)}, PPO: {len(x_ppo)}")
 
     dqn_avg_rewards = dqn["avg_rewards"]
     dqn_avg_holes = dqn["avg_holes"]
@@ -56,14 +62,20 @@ def custom_plot_training_stats(axs,
     ppo_avg_rewards = ppo["avg_rewards"]
     ppo_avg_holes = ppo["avg_holes"]
 
+    lagrange_avg_rewards = lagrange["avg_rewards"]
+    lagrange_avg_holes = lagrange["avg_holes"]
+    
+
     # Row 1 (DQN vs PPO)
     axs[0, i].plot(x_dqn, dqn_avg_rewards, label="DQN", color = DQN_COLOR)
     axs[0, i].plot(x_ppo, ppo_avg_rewards, label="PPO", color = PPO_COLOR)
+    axs[0, i].plot(x_lagrange, lagrange_avg_rewards, label="Lagrangian QL", color = LAGRANGE_COLOR)
     axs[0, i].set_title(indexes[0][i] + f" Récompenses\n({translate[cas]})", fontweight='bold')
 
     # Row 2 (DQN vs PPO)
     axs[1, i].plot(x_dqn, dqn_avg_holes, label="DQN", color = DQN_COLOR)
     axs[1, i].plot(x_ppo, ppo_avg_holes, label="PPO", color = PPO_COLOR)
+    axs[1, i].plot(x_lagrange, lagrange_avg_holes, label="Lagrangian QL", color = LAGRANGE_COLOR)
     axs[1, i].set_title(indexes[1][i] + f" Chutes dans trous\n({translate[cas]})", fontweight='bold')
 
     axs[1, i].set_ylim(0, 1) 
@@ -101,10 +113,11 @@ if __name__ == "__main__":
 
         dqn_stats = os.path.join(project_path, "training_stats", f"dqn_FrozenLake_{cas}.npz")
         ppo_stats = os.path.join(project_path, "training_stats", f"ppo_FrozenLake_{cas}.npz")
-
-        if os.path.exists(dqn_stats) and os.path.exists(ppo_stats):
+        lagrange_stats = os.path.join(project_path, "training_stats", f"lagrangian_ql_FrozenLake_{cas}.npz")
+        
+        if os.path.exists(dqn_stats) and os.path.exists(ppo_stats) and os.path.exists(lagrange_stats):
             with plt.rc_context({'font.size': 8, 'lines.linewidth': 0.5}): 
-                custom_plot_training_stats(axs, i, cas, dqn_stats, ppo_stats)
+                custom_plot_training_stats(axs, i, cas, dqn_stats, ppo_stats, lagrange_stats)
 
     plt.tight_layout()
     fig.savefig(fig_path, bbox_inches='tight', dpi=500)

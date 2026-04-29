@@ -7,6 +7,7 @@ from gymnasium.wrappers import TransformObservation
 from gymnasium.spaces import Box
 from stable_baselines3 import DQN, PPO
 from stable_baselines3.common.callbacks import BaseCallback
+from lagrangian_ql import LagrangianQLearning
 
 cas_etude = {
     "easy": {
@@ -221,6 +222,37 @@ def PPO_training(env, retrain=False, name="ppo_FrozenLake", total_timesteps=5000
         model = PPO.load(name, env=env)
     return model
 
+def lagrangian_ql_training(env, retrain=False, name="lagrangian_ql_FrozenLake", num_timestamps = 100000, cost_limit=5.0, stats_dir="training_stats", batch_size=20):
+    stats_path = os.path.join(stats_dir, f"{name}")
+    
+    if retrain or not os.path.exists(stats_path):
+        print(f"\n{'='*60}")
+        print(f"Starting Lagrangian Q-Learning: {name}")
+        print(f"{'='*60}")
+        
+        agent = LagrangianQLearning(env, alpha=0.1, gamma=0.99, epsilon=0.1, cost_limit=cost_limit, lambda_lr=0.01)
+        batch, costs, rewards = agent.train(num_timestamps, n_batches=batch_size)
+        
+        # Save final stats only
+        os.makedirs(stats_dir, exist_ok=True)
+        np.savez(
+            stats_path,
+            batch_index=batch,
+            avg_holes=costs,
+            avg_rewards=rewards,
+        )
+        
+        # Final summary
+        print(f"\n{'='*60}")
+        print(f"Training Complete!")
+        print(f"Stats saved to: {stats_path}")
+        print(f"{'='*60}\n")
+    else:
+        print(f"\nLoading pre-trained Lagrangian QL agent from: {stats_path}")
+        agent = LagrangianQLearning(env, alpha=0.1, gamma=0.99, epsilon=0.1, cost_limit=cost_limit, lambda_lr=0.01)
+    
+    return agent
+
 
 def save_training_stats(path, timesteps, avg_rewards, avg_holes):
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -317,34 +349,54 @@ def to_one_hot(state, n_states):
     return vec
 
 def main():
+    # Gestion des path
+    src_path = os.path.dirname(os.path.abspath(__file__))
+    project_path = os.path.dirname(src_path)
+
+    stats_path = os.path.join(project_path, "training_stats")
+
+
     #Entrainer/charger les modèles DQN et PPO pour chaque cas d'étude
     DQN_models = {}
     PPO_models = {}
     train_models = True
     total_timesteps_list = [250000, 500000, 1500000]
     episodes_per_batch = 20
+    # for i, cas in enumerate(list(cas_etude.keys())):
+    #     config = cas_etude[cas]
+    #     total_timesteps = total_timesteps_list[i]
+
+    #     print(f"Training DQN for {cas} case...")
+    #     env_dqn = make_env(config)
+    #     DQN_models[cas] = DQN_training(env_dqn, retrain=train_models, name=f"dqn_FrozenLake_{cas}", total_timesteps=total_timesteps, episodes_per_batch=episodes_per_batch)
+
+    #     print(f"Training PPO for {cas} case...")
+    #     env_ppo = make_env(config)
+    #     PPO_models[cas] = PPO_training(env_ppo, retrain=train_models, name=f"ppo_FrozenLake_{cas}", total_timesteps=total_timesteps, episodes_per_batch=episodes_per_batch)
+
+    #     dqn_stats = os.path.join("training_stats", f"dqn_FrozenLake_{cas}.npz")
+    #     ppo_stats = os.path.join("training_stats", f"ppo_FrozenLake_{cas}.npz")
+
+    #     if os.path.exists(dqn_stats):
+    #         plot_training_stats(dqn_stats, title_prefix=f"DQN - {cas}")
+    #     if os.path.exists(ppo_stats):
+    #         plot_training_stats(ppo_stats, title_prefix=f"PPO - {cas}")
+    
+    # display_env = make_env(cas_etude["hard"], render_mode="human")
+    # display_model(DQN_models["hard"], display_env)
+    
+    # Train Lagrangian Q-Learning
+    print("\nTraining Lagrangian Q-Learning...")
+
     for i, cas in enumerate(list(cas_etude.keys())):
         config = cas_etude[cas]
-        total_timesteps = total_timesteps_list[i]
-
-        print(f"Training DQN for {cas} case...")
-        env_dqn = make_env(config)
-        DQN_models[cas] = DQN_training(env_dqn, retrain=train_models, name=f"dqn_FrozenLake_{cas}", total_timesteps=total_timesteps, episodes_per_batch=episodes_per_batch)
-
-        print(f"Training PPO for {cas} case...")
-        env_ppo = make_env(config)
-        PPO_models[cas] = PPO_training(env_ppo, retrain=train_models, name=f"ppo_FrozenLake_{cas}", total_timesteps=total_timesteps, episodes_per_batch=episodes_per_batch)
-
-        dqn_stats = os.path.join("training_stats", f"dqn_FrozenLake_{cas}.npz")
-        ppo_stats = os.path.join("training_stats", f"ppo_FrozenLake_{cas}.npz")
-
-        if os.path.exists(dqn_stats):
-            plot_training_stats(dqn_stats, title_prefix=f"DQN - {cas}")
-        if os.path.exists(ppo_stats):
-            plot_training_stats(ppo_stats, title_prefix=f"PPO - {cas}")
-    
-    display_env = make_env(cas_etude["hard"], render_mode="human")
-    display_model(DQN_models["hard"], display_env)
+        env_lql = make_env(config)
+        lagrangian_ql_training(env_lql, 
+                               retrain=train_models, 
+                               name=os.path.join(stats_path, f"lagrangian_ql_FrozenLake_{cas}.npz"),
+                               num_timestamps= total_timesteps_list[i], 
+                               batch_size=episodes_per_batch,
+                               cost_limit=3.0)
 
 if __name__ == "__main__":
     main()
