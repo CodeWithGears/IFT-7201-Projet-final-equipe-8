@@ -222,10 +222,19 @@ def PPO_training(env, retrain=False, name="ppo_FrozenLake", total_timesteps=5000
         model = PPO.load(name, env=env)
     return model
 
-def lagrangian_ql_training(env, retrain=False, name="lagrangian_ql_FrozenLake", num_timestamps = 100000, cost_limit=5.0, stats_dir="training_stats", batch_size=20):
-    stats_path = os.path.join(stats_dir, f"{name}")
+def lagrangian_ql_training(env, 
+                           retrain=False, 
+                           name="lagrangian_ql_FrozenLake", 
+                           num_timestamps=100000, 
+                           cost_limit=5.0, 
+                           stats_dir="training_stats", 
+                           model_dir="models",
+                           batch_size=20):
     
-    if retrain or not os.path.exists(stats_path):
+    stats_path = os.path.join(stats_dir, f"{name}.npz")
+    agent_path = os.path.join(model_dir, f"{name}.npz")
+    
+    if retrain :
         print(f"\n{'='*60}")
         print(f"Starting Lagrangian Q-Learning: {name}")
         print(f"{'='*60}")
@@ -233,23 +242,14 @@ def lagrangian_ql_training(env, retrain=False, name="lagrangian_ql_FrozenLake", 
         agent = LagrangianQLearning(env, alpha=0.1, gamma=0.99, epsilon=0.1, cost_limit=cost_limit, lambda_lr=0.01)
         batch, costs, rewards = agent.train(num_timestamps, n_batches=batch_size)
         
-        # Save final stats only
-        os.makedirs(stats_dir, exist_ok=True)
-        np.savez(
-            stats_path,
-            batch_index=batch,
-            avg_holes=costs,
-            avg_rewards=rewards,
-        )
+        # Save agent weights
+        agent.save(agent_path)  # New: save agent
         
-        # Final summary
-        print(f"\n{'='*60}")
-        print(f"Training Complete!")
-        print(f"Stats saved to: {stats_path}")
-        print(f"{'='*60}\n")
-    else:
-        print(f"\nLoading pre-trained Lagrangian QL agent from: {stats_path}")
-        agent = LagrangianQLearning(env, alpha=0.1, gamma=0.99, epsilon=0.1, cost_limit=cost_limit, lambda_lr=0.01)
+        # Save training stats
+        os.makedirs(stats_dir, exist_ok=True)
+        np.savez(stats_path, batch_index=batch, avg_holes=costs, avg_rewards=rewards)
+        
+        print(f"Stats saved to: {stats_path}\n")
     
     return agent
 
@@ -354,6 +354,7 @@ def main():
     project_path = os.path.dirname(src_path)
 
     stats_path = os.path.join(project_path, "training_stats")
+    model_path = os.path.join(project_path, "models")
 
 
     #Entrainer/charger les modèles DQN et PPO pour chaque cas d'étude
@@ -393,7 +394,9 @@ def main():
         env_lql = make_env(config)
         lagrangian_ql_training(env_lql, 
                                retrain=train_models, 
-                               name=os.path.join(stats_path, f"lagrangian_ql_FrozenLake_{cas}.npz"),
+                               name=f"lagrangian_ql_FrozenLake_{cas}",
+                               stats_dir=stats_path,
+                               model_dir=model_path,
                                num_timestamps= total_timesteps_list[i], 
                                batch_size=episodes_per_batch,
                                cost_limit=3.0)

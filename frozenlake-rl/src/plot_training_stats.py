@@ -54,7 +54,6 @@ def custom_plot_training_stats(axs,
             f"Neither 'timesteps' nor 'batch_index' found in {ppo_path}. "
             f"Available keys: {list(ppo.keys())}"
         )
-    print(f"cas: {cas}, DQN: {len(x_dqn)}, PPO: {len(x_ppo)}")
 
     dqn_avg_rewards = dqn["avg_rewards"]
     dqn_avg_holes = dqn["avg_holes"]
@@ -69,13 +68,13 @@ def custom_plot_training_stats(axs,
     # Row 1 (DQN vs PPO)
     axs[0, i].plot(x_dqn, dqn_avg_rewards, label="DQN", color = DQN_COLOR)
     axs[0, i].plot(x_ppo, ppo_avg_rewards, label="PPO", color = PPO_COLOR)
-    axs[0, i].plot(x_lagrange, lagrange_avg_rewards, label="Lagrangian QL", color = LAGRANGE_COLOR)
+    axs[0, i].plot(x_lagrange, lagrange_avg_rewards, label="Lagrangian QL", color = LAGRANGE_COLOR, alpha=0.7)
     axs[0, i].set_title(indexes[0][i] + f" Récompenses\n({translate[cas]})", fontweight='bold')
 
     # Row 2 (DQN vs PPO)
     axs[1, i].plot(x_dqn, dqn_avg_holes, label="DQN", color = DQN_COLOR)
     axs[1, i].plot(x_ppo, ppo_avg_holes, label="PPO", color = PPO_COLOR)
-    axs[1, i].plot(x_lagrange, lagrange_avg_holes, label="Lagrangian QL", color = LAGRANGE_COLOR)
+    axs[1, i].plot(x_lagrange, lagrange_avg_holes, label="Lagrangian QL", color = LAGRANGE_COLOR, alpha=0.7)
     axs[1, i].set_title(indexes[1][i] + f" Chutes dans trous\n({translate[cas]})", fontweight='bold')
 
     axs[1, i].set_ylim(0, 1) 
@@ -85,15 +84,8 @@ def custom_plot_training_stats(axs,
     for row in range(2):
         for col in range(3):
             axs[row, col].grid(True, linestyle='--', alpha=0.5)
-            if row == 1:
+            if row == 1 and col == 1:
                 axs[row, col].set_xlabel(xlabel, labelpad=15)
-
-    axs[0, 0].legend(loc="lower right")
-    axs[0, 1].legend(loc="upper left")
-    axs[0, 2].legend(loc="upper left")
-    axs[1, 0].legend(loc="upper right")
-    axs[1, 1].legend(loc="upper right")
-    axs[1, 2].legend(loc="lower left")
 
     for ax in axs.flat:
         ax.xaxis.set_major_formatter(mticker.ScalarFormatter(useMathText=True))
@@ -102,7 +94,7 @@ def custom_plot_training_stats(axs,
 
 if __name__ == "__main__":
 
-    fig, axs = plt.subplots(2, 3, figsize=(6, 5), sharex=False, sharey=False)
+    fig, axs = plt.subplots(2, 3, figsize=(6, 6), sharex=False, sharey=False)
 
     src_path = os.path.dirname(os.path.abspath(__file__))
     project_path = os.path.dirname(src_path)
@@ -120,4 +112,9 @@ if __name__ == "__main__":
                 custom_plot_training_stats(axs, i, cas, dqn_stats, ppo_stats, lagrange_stats)
 
     plt.tight_layout()
+    
+    # Add a big legend at the bottom of the figure
+    handles, labels = axs[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower center', bbox_to_anchor=(0.5, -0.04), ncol=3, fontsize=10, frameon=True)
+    
     fig.savefig(fig_path, bbox_inches='tight', dpi=500)

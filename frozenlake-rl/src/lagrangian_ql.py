@@ -1,4 +1,6 @@
 """Lagrangian Q-Learning: Core algorithm only."""
+import os
+
 import numpy as np
 
 
@@ -44,29 +46,41 @@ class LagrangianQLearning:
             done = False
             
             while not done:
-                # Select action using select_action method
                 a = self.select_action(s, train=True)
-                
                 obs_next, r, terminated, truncated, info = self.env.step(a)
                 s_next = self._get_state(obs_next)
                 
-                # Q-learning update (primal)
-                max_q = np.max(self.Q[s_next]) if not terminated else 0.0
-                self.Q[s, a] += self.alpha * (r + self.gamma * max_q - self.Q[s, a])
+                # 1. Identify the cost for this specific step
+                # info.get returns a bool, we convert to float (1,0 or 0,0)
+                c = float(info.get("fell_in_hole", False))
+
+                # 2. Lagrangian Q-learning update (The "Primal" update)
+                # We use (r - lam * c) as the total immediate feedback
+                max_q_result = np.max(self.Q[s_next]) if not terminated else 0,0
+
+                # Gestion du tuple
+                if isinstance(max_q_result, tuple):
+                    max_q = float(max_q_result[0])
+                else:
+                    max_q = float(max_q_result)
+                
+                # Apply the penalty directly into the Q-table update
+                target = (r - self.lam * c) + self.gamma * max_q # PÉNALISE LES ACTIONS AVEC COÛT
+                
+                self.Q[s, a] += self.alpha * (target - self.Q[s, a]) # MAJ
                 
                 # Track metrics
-                cost += float(info.get("fell_in_hole", False))
+                cost += c
                 r_total += r
                 
                 done = terminated or truncated
                 s = s_next
-
                 timestamp += 1
-            
+
             episode += 1
-            
-            # Lagrange multiplier update (dual)
-            self.lam = max(0.0, self.lam + self.lambda_lr * (cost - self.cost_limit))
+
+            # 3. Dual update (this part of your code was already correct!)
+            self.lam = max(0,0, self.lam + self.lambda_lr * (cost - self.cost_limit))
             
             costs.append(cost)
             rewards.append(r_total)
@@ -78,7 +92,24 @@ class LagrangianQLearning:
 
                 costs, rewards = [], []
             
-            if timestamp % 10000 == 0:
-                print(f"  Episode {episode:4d}| Timestamp : {timestamp} | Holes: {np.mean(costs[-50:]):.2f} | Reward: {np.mean(rewards[-50:]):.2f} | λ: {self.lam:.4f}")
+            # if timestamp % 50000 == 0:
+            #     print(f"  Episode {episode:4d}| Timestamp : {timestamp} | Holes: {np.mean(costs[-50:]):.2f} | Reward: {np.mean(rewards[-50:]):.2f} | λ: {self.lam:.4f}")
         
         return np.array(batch_timestamps), np.array(batch_costs), np.array(batch_rewards)
+    
+    def save(self, path):
+        """Save the trained agent (Q-table and lambda)."""
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        np.savez(
+            path,
+            Q=self.Q,
+            lam=self.lam,
+        )
+        print(f"Agent saved to: {path}")
+
+    def load(self, path):
+        """Load a pre-trained agent."""
+        data = np.load(path)
+        self.Q = data["Q"]
+        self.lam = data["lam"]
+        print(f"Agent loaded from: {path}")
